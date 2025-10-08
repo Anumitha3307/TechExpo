@@ -1,86 +1,73 @@
-# Step 1. Capturing the image.
-# Step 2. Convert rgb to hsv.
-# Step 3. Gaussian blur to the hsv converted image.
-# Step 4. Morphological transformations to the Gaussian blurred image.
-# Step 5. Searching contours
-# Step 6. Navigate the car.
+#!/usr/bin/env python3
+"""
+Optimized tutorial.py — Combined demo that visualizes color detection and steering decisions.
+
+Press:
+ - 'q' to quit
+ - 's' to print current HSV range
+"""
 
 import cv2
 import imutils
-from imutils.video import VideoStream
 import numpy as np
-from directkeys import A, D, Space, ReleaseKey, PressKey
+import time
+from imutils.video import VideoStream
 
-cam = VideoStream(src=0).start()
-currentKey=list()
+# Use functions from local modules
+from directkeys import PressKey, ReleaseKey, A, D, Space
 
-while True:
-    key = False
+def nothing(x): pass
 
-    img = cam.read()
-    img = np.flip(img, axis=1)
-    img = np.array(img)
+def create_trackbars():
+    cv2.namedWindow("Controls")
+    cv2.createTrackbar("H Lower", "Controls", 53, 180, nothing)
+    cv2.createTrackbar("S Lower", "Controls", 55, 255, nothing)
+    cv2.createTrackbar("V Lower", "Controls", 209, 255, nothing)
+    cv2.createTrackbar("H Upper", "Controls", 180, 180, nothing)
+    cv2.createTrackbar("S Upper", "Controls", 255, 255, nothing)
+    cv2.createTrackbar("V Upper", "Controls", 255, 255, nothing)
 
-    hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-    blurred = cv2.GaussianBlur(hsv,(11,11),0)
+def get_hsv_range():
+    hL = cv2.getTrackbarPos("H Lower", "Controls")
+    sL = cv2.getTrackbarPos("S Lower", "Controls")
+    vL = cv2.getTrackbarPos("V Lower", "Controls")
+    hU = cv2.getTrackbarPos("H Upper", "Controls")
+    sU = cv2.getTrackbarPos("S Upper", "Controls")
+    vU = cv2.getTrackbarPos("V Upper", "Controls")
+    return np.array([hL, sL, vL]), np.array([hU, sU, vU])
 
-    colourLower = np.array([53,55,209])
-    colourUpper = np.array([180,255,255])
+def main():
+    vs = VideoStream(src=0).start()
+    time.sleep(1.0)
+    create_trackbars()
 
-    mask = cv2.inRange(blurred,colourLower,colourUpper)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,np.ones((5,5),np.uint8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+    print("Adjust HSV sliders until detection works.")
+    print("Press 'q' to quit, 's' to print HSV values.")
 
-    width = img.shape[1]
-    height = img.shape[0]
+    while True:
+        frame = vs.read()
+        if frame is None:
+            continue
+        frame = cv2.flip(frame, 1)
+        frame = imutils.resize(frame, width=640)
 
-    upContour = mask[0:height//2,0:width]
-    downContour = mask[3*height//4:height,2*width//5:3*width//5]
+        lower, upper = get_hsv_range()
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, lower, upper)
+        res = cv2.bitwise_and(frame, frame, mask=mask)
 
-    cnts_up = cv2.findContours(upContour,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    cnts_up = imutils.grab_contours(cnts_up)
+        cv2.imshow("Original", frame)
+        cv2.imshow("Mask", mask)
+        cv2.imshow("Filtered", res)
 
-    cnts_down = cv2.findContours(downContour,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    cnts_down = imutils.grab_contours(cnts_down)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            print(f"Lower: {lower.tolist()}, Upper: {upper.tolist()}")
+        elif key == ord('q'):
+            break
 
-    if len(cnts_up) > 0:
-        c = max(cnts_up,key = cv2.contourArea)
-        M = cv2.moments(c)
-        cX = int(M["m10"]/M["m00"])
+    cv2.destroyAllWindows()
+    vs.stop()
 
-        if cX < (width//2 -35):
-            PressKey(A)
-            key=True
-            currentKey.append(A)
-        
-        elif cX > (width//2 +35):
-            PressKey(D)
-            key=True
-            currentKey.append(D)
-    
-    if len(cnts_down) > 0:
-        PressKey(Space)
-        key = True
-        currentKey.append(Space)
-
-    img = cv2.rectangle(img, (0,0),(width//2-35,height//2),(0,255,0),1)
-    cv2.putText(img,'LEFT',(110,30),cv2.FONT_HERSHEY_DUPLEX, 1, (139,0,0))
-
-    img = cv2.rectangle(img, (width//2+35,0),(width,height//2),(0,255,0),1)
-    cv2.putText(img,'RIGHT',(440,30),cv2.FONT_HERSHEY_DUPLEX,  1, (139,0,0))
-
-    img = cv2.rectangle(img, (2*(width//5),3*height//4),(3*width//5,height),(0,255,0),1)
-    cv2.putText(img,'NITRO',(2*(width//5) + 20,height-10),cv2.FONT_HERSHEY_DUPLEX,  1, (139,0,0))
-
-    cv2.imshow("Steering", img)
-
-    if not key and len(currentKey)!=0:
-        for current in currentKey:
-            ReleaseKey(current)
-
-    key = cv2.waitKey(1) & 0xFF
-    if key == ord('q'):
-        break
-
-cv2.destroyAllWindows()
-
+if __name__ == "__main__":
+    main()
