@@ -1,36 +1,69 @@
+#!/usr/bin/env python3
+"""
+Optimized color.py — HSV color range tuner for SteeringWheel project.
+Use this to find lower/upper HSV bounds for your marker color.
+
+Press 's' to print current HSV range to console.
+Press 'q' to quit.
+"""
+
 import cv2
 import numpy as np
+from imutils.video import VideoStream
+import time
 
-
-cam = cv2.VideoCapture(0)
-cv2.namedWindow('Colour Detection')
-
-def window(x):
+def nothing(x):
     pass
 
-cv2.createTrackbar('Hue', 'Colour Detection', 0, 179, window)
-cv2.createTrackbar('Saturation', 'Colour Detection', 0, 255, window)
-cv2.createTrackbar('Value', 'Colour Detection', 0, 255, window)
+def create_trackbars(window="Trackbars"):
+    cv2.namedWindow(window)
+    cv2.createTrackbar("H Lower", window, 0, 180, nothing)
+    cv2.createTrackbar("S Lower", window, 0, 255, nothing)
+    cv2.createTrackbar("V Lower", window, 0, 255, nothing)
+    cv2.createTrackbar("H Upper", window, 180, 180, nothing)
+    cv2.createTrackbar("S Upper", window, 255, 255, nothing)
+    cv2.createTrackbar("V Upper", window, 255, 255, nothing)
 
-while(True):
-    ret, img = cam.read()
-    img = np.flip(img,axis=1)
-    img = cv2.resize(img, (480,360))
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    blurred = cv2.GaussianBlur(hsv, (11, 11), 0)
+def get_trackbar_values(window="Trackbars"):
+    hL = cv2.getTrackbarPos("H Lower", window)
+    sL = cv2.getTrackbarPos("S Lower", window)
+    vL = cv2.getTrackbarPos("V Lower", window)
+    hU = cv2.getTrackbarPos("H Upper", window)
+    sU = cv2.getTrackbarPos("S Upper", window)
+    vU = cv2.getTrackbarPos("V Upper", window)
+    return np.array([hL, sL, vL]), np.array([hU, sU, vU])
 
-    h = cv2.getTrackbarPos('Hue', 'Colour Detection')
-    s = cv2.getTrackbarPos('Saturation', 'Colour Detection')
-    v = cv2.getTrackbarPos('Value', 'Colour Detection')
+def main():
+    vs = VideoStream(src=0).start()
+    time.sleep(1.0)
+    create_trackbars()
 
-    lower_colour = np.array([h, s, v])
-    upper_colour = np.array([180, 255, 255])
-    mask = cv2.inRange(hsv, lower_colour, upper_colour)
-    cv2.imshow('Colour Detection', cv2.bitwise_and(img, img, mask=mask))
+    print("Adjust sliders until only your marker is visible in the mask window.")
+    print("Press 's' to show HSV range, 'q' to quit.")
 
-    key = cv2.waitKey(1) & 0xFF
-    if key == ord("q"):
-        break
+    while True:
+        frame = vs.read()
+        if frame is None:
+            continue
+        frame = cv2.flip(frame, 1)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-cam.release()
-cv2.destroyAllWindows()
+        lower, upper = get_trackbar_values()
+        mask = cv2.inRange(hsv, lower, upper)
+        res = cv2.bitwise_and(frame, frame, mask=mask)
+
+        cv2.imshow("Original", frame)
+        cv2.imshow("Mask", mask)
+        cv2.imshow("Filtered", res)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            print(f"Lower HSV: {lower.tolist()}, Upper HSV: {upper.tolist()}")
+        elif key == ord('q'):
+            break
+
+    cv2.destroyAllWindows()
+    vs.stop()
+
+if __name__ == "__main__":
+    main()
